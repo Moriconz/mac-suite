@@ -46,7 +46,7 @@ fn main_window(mtm: MainThreadMarker, title: &str) -> Retained<NSWindow> {
     window
 }
 
-fn item(mtm: MainThreadMarker, title: &str, action: Option<Sel>, key: &str) -> Retained<NSMenuItem> {
+pub fn item(mtm: MainThreadMarker, title: &str, action: Option<Sel>, key: &str) -> Retained<NSMenuItem> {
     unsafe {
         NSMenuItem::initWithTitle_action_keyEquivalent(
             NSMenuItem::alloc(mtm),
@@ -57,7 +57,7 @@ fn item(mtm: MainThreadMarker, title: &str, action: Option<Sel>, key: &str) -> R
     }
 }
 
-fn submenu(mtm: MainThreadMarker, title: &str, items: &[Retained<NSMenuItem>]) -> Retained<NSMenuItem> {
+pub fn submenu(mtm: MainThreadMarker, title: &str, items: &[Retained<NSMenuItem>]) -> Retained<NSMenuItem> {
     let menu = NSMenu::initWithTitle(NSMenu::alloc(mtm), &NSString::from_str(title));
     for i in items {
         menu.addItem(i);

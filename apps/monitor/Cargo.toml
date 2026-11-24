@@ -1,0 +1,11 @@
+[package]
+name = "monitor"
+edition.workspace = true
+version.workspace = true
+
+[dependencies]
+appkit-shell.workspace = true
+objc2.workspace = true
+objc2-foundation.workspace = true
+objc2-app-kit.workspace = true
+sysinfo = { version = "0.38", default-features = false, features = ["system"] }
