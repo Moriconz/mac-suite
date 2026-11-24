@@ -31,6 +31,19 @@ Funziona:
 Manca rispetto a Monitoraggio Attività: schede Energia, Disco, Rete; campionamento processo; icona del Dock con grafico; storico e avvisi soglia; albero processi.
 Nota: la ricerca per nome vede il nome dell'eseguibile (un processo avviato con `exec -a` può non comparire con il nome dichiarato).
 
+Verifiche (macOS, Apple Silicon, build release):
+- Termina processo su un processo di test: conferma, processo terminato. Annulla: processo ancora vivo.
+- Forza uscita con conferma: processo terminato.
+- Ricerca: "Finder" → 1 di 900 processi; Esc svuota il campo e ripristina la lista completa.
+- Ordinamento: clic sull'intestazione "Memoria" riordina in modo decrescente.
+- Avvio fino alla finestra: ~0,7 s.
+- Memoria, stessa metrica di Monitoraggio Attività (footprint fisico, `footprint -p`): Monitor 38 MB, Monitoraggio Attività 85 MB. RSS (`ps`) solo come riferimento: Monitor ~120 MB, Monitoraggio Attività ~28 MB, perché l'RSS conta anche le librerie condivise.
+- CPU medio su 20 s con entrambe aperte: Monitor 1,9%, Monitoraggio Attività 2,1% (misurato come delta del tempo CPU).
+- Avvio di Monitoraggio Attività non misurato: richiederebbe di chiudere l'app Apple.
+- `cargo test --workspace`: passa (test su ordinamento e formattazione).
+
+Residuo da indagare: ~25 MB sopra la baseline. Probabile causa: copia di `Vec<Row>` con `String` ogni 2 s e oggetti AppKit della tabella.
+
 ## Limiti noti (di tutta la suite)
 - Le app non diventano "di sistema": si affiancano a quelle Apple, non le rimpiazzano.
 - Niente Developer ID: al primo avvio serve **Apri comunque** (vedi sotto).
