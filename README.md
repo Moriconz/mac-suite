@@ -25,9 +25,11 @@ Funziona:
 - elenco processi con nome, % CPU, memoria, PID, aggiornato ogni 2 s;
 - ordinamento per colonna, larghezze e ordine colonne ricordati;
 - **Processo › Termina processo** (⌥⌘Q) e **Forza uscita** (⌥⇧⌘Q) con conferma;
+- ricerca per nome o PID, con conteggio "M di N processi" nel sottotitolo;
 - totale processi e CPU nel sottotitolo; Dark Mode e VoiceOver da AppKit.
 
-Manca rispetto a Monitoraggio Attività: schede Energia, Disco, Rete; ricerca/filtro; campionamento processo; icona del Dock con grafico; storico e avvisi soglia; albero processi.
+Manca rispetto a Monitoraggio Attività: schede Energia, Disco, Rete; campionamento processo; icona del Dock con grafico; storico e avvisi soglia; albero processi.
+Nota: la ricerca per nome vede il nome dell'eseguibile (un processo avviato con `exec -a` può non comparire con il nome dichiarato).
 
 ## Limiti noti (di tutta la suite)
 - Le app non diventano "di sistema": si affiancano a quelle Apple, non le rimpiazzano.

@@ -7,8 +7,10 @@ use objc2::{
     DefinedClass, MainThreadOnly, define_class, rc::Retained, runtime::AnyObject, sel,
 };
 use objc2_app_kit::{
-    NSAlert, NSAlertFirstButtonReturn, NSApplication, NSEventModifierFlags, NSMenuItem,
-    NSScrollView, NSTableColumn, NSTableView, NSTableViewDataSource,
+    NSAlert, NSAlertFirstButtonReturn, NSApplication, NSEventModifierFlags, NSFont,
+    NSLayoutAttribute, NSMenuItem, NSMenuItemValidation, NSScrollView, NSSearchField, NSStackView,
+    NSStackViewDistribution, NSTableColumn, NSTableView, NSTableViewDataSource, NSTextAlignment,
+    NSTextFieldCell, NSUserInterfaceLayoutOrientation,
 };
 use objc2_foundation::{
     MainThreadMarker, NSArray, NSIndexSet, NSInteger, NSObject, NSObjectProtocol, NSRunLoop,
@@ -16,6 +18,7 @@ use objc2_foundation::{
 };
 use sysinfo::{Pid, ProcessesToUpdate, Signal, System};
 
+#[derive(Clone)]
 struct Row {
     pid: u32,
     name: String,
@@ -32,9 +35,11 @@ const COLS: [(&str, &str, f64); 4] = [
 
 struct State {
     sys: System,
+    all: Vec<Row>,
     rows: Vec<Row>,
     key: String,
     asc: bool,
+    query: String,
 }
 
 #[derive(Default)]
@@ -50,6 +55,13 @@ define_class!(
     struct Monitor;
 
     unsafe impl NSObjectProtocol for Monitor {}
+
+    unsafe impl NSMenuItemValidation for Monitor {
+        #[unsafe(method(validateMenuItem:))]
+        fn validate_menu_item(&self, _item: &NSMenuItem) -> bool {
+            self.selected_pid().is_some()
+        }
+    }
 
     unsafe impl NSTableViewDataSource for Monitor {
         #[unsafe(method(numberOfRowsInTableView:))]
@@ -86,6 +98,13 @@ define_class!(
 
         #[unsafe(method(forceQuitProcess:))]
         fn force_quit_process(&self, _s: &NSMenuItem) { self.kill(true) }
+
+        #[unsafe(method(filterChanged:))]
+        fn filter_changed(&self, field: &NSSearchField) {
+            let q = field.stringValue().to_string().to_lowercase();
+            self.with(|s| s.query = q);
+            self.reload();
+        }
     }
 );
 
@@ -96,6 +115,14 @@ fn cell(r: &Row, id: &str) -> String {
         "mem" => bytes(r.mem),
         _ => r.pid.to_string(),
     }
+}
+
+/// Colonna numerica: cifre a larghezza fissa e allineamento a destra, così i valori si leggono in colonna.
+fn numeric_cell(mtm: MainThreadMarker) -> Retained<NSTextFieldCell> {
+    let cell = NSTextFieldCell::new(mtm);
+    cell.setFont(Some(&NSFont::monospacedDigitSystemFontOfSize_weight(13., 0.)));
+    cell.setAlignment(NSTextAlignment::Right);
+    cell
 }
 
 fn bytes(b: u64) -> String {
@@ -143,18 +170,29 @@ impl Monitor {
     fn reload(&self) {
         let sel = self.selected_pid();
         let (index, summary) = self.with(|s| {
-            s.rows = s.sys.processes().values().map(|p| Row {
+            s.all = s.sys.processes().values().map(|p| Row {
                 pid: p.pid().as_u32(),
                 name: p.name().to_string_lossy().into_owned(),
                 cpu: p.cpu_usage(),
                 mem: p.memory(),
             }).collect();
-            sort(&mut s.rows, &s.key, s.asc);
+            sort(&mut s.all, &s.key, s.asc);
             // sysinfo misura ogni processo in % di un core: dividiamo per i core per una % di sistema.
             let cores = std::thread::available_parallelism().map_or(1, |n| n.get()) as f32;
-            let cpu: f32 = s.rows.iter().map(|r| r.cpu).sum::<f32>() / cores;
+            let cpu: f32 = s.all.iter().map(|r| r.cpu).sum::<f32>() / cores;
+            let q = s.query.clone();
+            s.rows = s.all.iter()
+                .filter(|r| q.is_empty() || r.name.to_lowercase().contains(&q) || r.pid.to_string().contains(&q))
+                .cloned()
+                .collect();
             let index = sel.and_then(|pid| s.rows.iter().position(|r| r.pid == pid));
-            (index, format!("{} processi · CPU {:.1}%", s.rows.len(), cpu))
+            let total = s.all.len();
+            let text = if q.is_empty() {
+                format!("{total} processi · CPU totale {cpu:.1}%")
+            } else {
+                format!("{} di {total} processi · CPU totale {cpu:.1}%", s.rows.len())
+            };
+            (index, text)
         });
         let t = self.table();
         t.reloadData();
@@ -192,7 +230,7 @@ fn main() {
         let mut sys = System::new();
         sys.refresh_processes(ProcessesToUpdate::All, true);
         let monitor = Monitor::new(mtm);
-        *monitor.ivars().state.borrow_mut() = Some(State { sys, rows: vec![], key: "cpu".into(), asc: false });
+        *monitor.ivars().state.borrow_mut() = Some(State { sys, all: vec![], rows: vec![], key: "cpu".into(), asc: false, query: String::new() });
 
         let table = NSTableView::new(mtm);
         for (id, title, width) in COLS {
@@ -201,9 +239,14 @@ fn main() {
             col.setTitle(&NSString::from_str(title));
             col.setWidth(width);
             col.setSortDescriptorPrototype(Some(&NSSortDescriptor::sortDescriptorWithKey_ascending(Some(&id), id.to_string() == "name")));
+            if id.to_string() != "name" {
+                unsafe { col.setDataCell(&numeric_cell(mtm)) };
+                col.headerCell().setAlignment(NSTextAlignment::Right);
+            }
             table.addTableColumn(&col);
         }
         table.setUsesAlternatingRowBackgroundColors(true);
+        table.setRowHeight(20.);
         table.setAutosaveName(Some(&NSString::from_str("processi")));
         table.setAutosaveTableColumns(true);
         unsafe { table.setDataSource(Some(objc2::runtime::ProtocolObject::from_ref(&*monitor))) };
@@ -214,7 +257,22 @@ fn main() {
         let scroll = NSScrollView::new(mtm);
         scroll.setHasVerticalScroller(true);
         scroll.setDocumentView(Some(&table));
-        window.setContentView(Some(&scroll));
+
+        let search = NSSearchField::new(mtm);
+        search.setPlaceholderString(Some(&NSString::from_str("Cerca per nome o PID")));
+        search.setSendsSearchStringImmediately(true);
+        unsafe {
+            search.setTarget(Some(&monitor));
+            search.setAction(Some(sel!(filterChanged:)));
+        }
+
+        let stack = NSStackView::new(mtm);
+        stack.setOrientation(NSUserInterfaceLayoutOrientation::Vertical);
+        stack.setAlignment(NSLayoutAttribute::Width);
+        stack.setDistribution(NSStackViewDistribution::Fill);
+        stack.addArrangedSubview(&search);
+        stack.addArrangedSubview(&scroll);
+        window.setContentView(Some(&stack));
         window.setTitle(&NSString::from_str("Monitor attività"));
 
         // Menu Processo: Termina (⌥⌘Q), Forza uscita (⌥⇧⌘Q)
