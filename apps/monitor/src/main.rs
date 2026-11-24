@@ -16,7 +16,12 @@ use objc2_foundation::{
     MainThreadMarker, NSArray, NSIndexSet, NSInteger, NSObject, NSObjectProtocol, NSRunLoop,
     NSRunLoopCommonModes, NSSortDescriptor, NSString, NSTimer,
 };
-use sysinfo::{Pid, ProcessesToUpdate, Signal, System};
+use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, Signal, System};
+
+// Solo CPU e memoria: niente disco ed eseguibile, per ridurre il costo di ogni aggiornamento.
+fn refresh_kind() -> ProcessRefreshKind {
+    ProcessRefreshKind::nothing().with_cpu().with_memory()
+}
 
 #[derive(Clone)]
 struct Row {
@@ -89,7 +94,7 @@ define_class!(
     impl Monitor {
         #[unsafe(method(tick:))]
         fn tick(&self, _t: &NSTimer) {
-            self.with(|s| { s.sys.refresh_processes(ProcessesToUpdate::All, true); });
+            self.with(|s| { s.sys.refresh_processes_specifics(ProcessesToUpdate::All, true, refresh_kind()); });
             self.reload();
         }
 
@@ -228,7 +233,7 @@ impl Monitor {
 fn main() {
     appkit_shell::run("Monitor", |mtm, window| {
         let mut sys = System::new();
-        sys.refresh_processes(ProcessesToUpdate::All, true);
+        sys.refresh_processes_specifics(ProcessesToUpdate::All, true, refresh_kind());
         let monitor = Monitor::new(mtm);
         *monitor.ivars().state.borrow_mut() = Some(State { sys, all: vec![], rows: vec![], key: "cpu".into(), asc: false, query: String::new() });
 
