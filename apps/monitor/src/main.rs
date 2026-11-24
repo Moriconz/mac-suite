@@ -150,7 +150,9 @@ impl Monitor {
                 mem: p.memory(),
             }).collect();
             sort(&mut s.rows, &s.key, s.asc);
-            let cpu: f32 = s.rows.iter().map(|r| r.cpu).sum();
+            // sysinfo misura ogni processo in % di un core: dividiamo per i core per una % di sistema.
+            let cores = std::thread::available_parallelism().map_or(1, |n| n.get()) as f32;
+            let cpu: f32 = s.rows.iter().map(|r| r.cpu).sum::<f32>() / cores;
             let index = sel.and_then(|pid| s.rows.iter().position(|r| r.pid == pid));
             (index, format!("{} processi · CPU {:.1}%", s.rows.len(), cpu))
         });
