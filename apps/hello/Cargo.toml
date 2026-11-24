@@ -1,0 +1,9 @@
+[package]
+name = "hello"
+edition.workspace = true
+version.workspace = true
+
+[dependencies]
+appkit-shell.workspace = true
+objc2-foundation.workspace = true
+objc2-app-kit.workspace = true
